@@ -12,6 +12,15 @@ const isPositiveNumber = num => isFinite(num) && num > 0;
 const validate = value => every([ isValidChar, isValidLength], fn => fn(value));
 const toValidNumber = flow([toNumber, num => isPositiveNumber(num) ? Math.round(num) : NaN ]);
 
+const evalSize = (val) => size(val);
+const square = (length) => multiply(length, length);
+const remains = (square) => modulo(square, 3);
+
+const refreshValue = (val, fn, refreshFn = ((v)=>v)) => {
+    const res = refreshFn(val);
+    fn(res);
+    return res;
+}
 
 const processSequence = ({value, writeLog, handleSuccess, handleError}) => {
     writeLog(value);
@@ -30,25 +39,10 @@ const processSequence = ({value, writeLog, handleSuccess, handleError}) => {
 
     api.get(API_NUMBERS_URL, {from: 10, to: 2, number: num})
         .then(property('result'))
-        .then(result => {
-            writeLog(result);
-            return result;
-        })
-        .then(binStr => {
-            const length = size(binStr);
-            writeLog(length);
-            return length;
-        })
-        .then(length => {
-            const square = multiply(length, length);
-            writeLog(square);
-            return square;
-        })
-        .then(square => {
-            const remains = modulo(square, 3);
-            writeLog(remains);
-            return remains;
-        })
+        .then(result => refreshValue(result, writeLog))
+        .then(binStr => refreshValue(binStr, writeLog, evalSize))
+        .then(length => refreshValue(length, writeLog, square))
+        .then(square => refreshValue(square, writeLog, remains))
         .then(remains => api.get(`${API_ANIMALS_URL}${remains}`, {}))
         .then(property('result'))
         .then(handleSuccess)

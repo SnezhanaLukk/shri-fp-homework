@@ -22,7 +22,6 @@ export default class Api {
 
     get = curry((url, params) => {
         this.errorCountdown = this.errorCountdown - 1;
-        console.log('GET', URL);
 
         if (this.ebableErrors && this.errorCountdown === 0) {
             this.errorCountdown = 7;
@@ -32,7 +31,6 @@ export default class Api {
 
         return new Promise((resolve, reject) => {
             setTimeout(() => {
-                console.log('url', url);
                 const urlInstance = new URL(url);
                 const host = urlInstance.host;
                 const pathname = urlInstance.pathname;
@@ -65,7 +63,6 @@ export default class Api {
                         break;
                     case 'animals.tech':
                         const animalId = Number(pathname.slice(1))
-                        console.log('animalId', animalId);
                         
                         if (Number.isNaN(animalId)) {
                             reject('Не получается распарсить id животного');
