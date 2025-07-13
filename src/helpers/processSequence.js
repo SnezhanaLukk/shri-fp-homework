@@ -1,51 +1,58 @@
-/**
- * @file Домашка по FP ч. 2
- *
- * Подсказки:
- * Метод get у инстанса Api – каррированый
- * GET / https://animals.tech/{id}
- *
- * GET / https://api.tech/numbers/base
- * params:
- * – number [Int] – число
- * – from [Int] – из какой системы счисления
- * – to [Int] – в какую систему счисления
- *
- * Иногда промисы от API будут приходить в состояние rejected, (прямо как и API в реальной жизни)
- * Ответ будет приходить в поле {result}
- */
- import Api from '../tools/api';
+import Api from '../tools/api';
+import { inRange, flow, toNumber, isFinite, every, size, property, multiply, partial } from 'lodash';
+import { modulo } from 'ramda';
 
- const api = new Api();
+const api = new Api();
+const API_NUMBERS_URL = 'https://api.tech/numbers/base';
+const API_ANIMALS_URL = 'https://animals.tech/';
 
- /**
-  * Я – пример, удали меня
-  */
- const wait = time => new Promise(resolve => {
-     setTimeout(resolve, time);
- })
+const isValidChar = str => /^[\d.]+$/.test(str);
+const isValidLength = str => inRange(str.length, 3, 10);
+const isPositiveNumber = num => isFinite(num) && num > 0;
+const validate = value => every([ isValidChar, isValidLength], fn => fn(value));
+const toValidNumber = flow([toNumber, num => isPositiveNumber(num) ? Math.round(num) : NaN ]);
 
- const processSequence = ({value, writeLog, handleSuccess, handleError}) => {
-     /**
-      * Я – пример, удали меня
-      */
-     writeLog(value);
 
-     api.get('https://api.tech/numbers/base', {from: 2, to: 10, number: '01011010101'}).then(({result}) => {
-         writeLog(result);
-     });
+const processSequence = ({value, writeLog, handleSuccess, handleError}) => {
+    writeLog(value);
 
-     wait(2500).then(() => {
-         writeLog('SecondLog')
+    if(!validate(value)) {
+        handleError('ValidationError');
+        return;
+    }
 
-         return wait(1500);
-     }).then(() => {
-         writeLog('ThirdLog');
+    const num = toValidNumber(value);
+    if (isNaN(num)) {
+        handleError('ValidationError');
+        return;
+    }
+    writeLog(num);
 
-         return wait(400);
-     }).then(() => {
-         handleSuccess('Done');
-     });
- }
+    api.get(API_NUMBERS_URL, {from: 10, to: 2, number: num})
+        .then(property('result'))
+        .then(result => {
+            writeLog(result);
+            return result;
+        })
+        .then(binStr => {
+            const length = size(binStr);
+            writeLog(length);
+            return length;
+        })
+        .then(length => {
+            const square = multiply(length, length);
+            writeLog(square);
+            return square;
+        })
+        .then(square => {
+            const remains = modulo(square, 3);
+            writeLog(remains);
+            return remains;
+        })
+        .then(remains => api.get(`${API_ANIMALS_URL}${remains}`, {}))
+        .then(property('result'))
+        .then(handleSuccess)
+        .catch(partial(handleError, 'API Error'));
+}
 
 export default processSequence;
