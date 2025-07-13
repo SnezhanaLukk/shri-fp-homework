@@ -1,8 +1,9 @@
 import Api from '../tools/api';
-import { inRange, flow, toNumber, isFinite, every, size, property, multiply, partial } from 'lodash';
-import { modulo } from 'ramda';
+import { __, andThen, assoc, compose, otherwise, partial, prop, modulo} from 'ramda';
+import { inRange, toNumber, isFinite, every, size,  multiply } from 'lodash';
 
 const api = new Api();
+
 const API_NUMBERS_URL = 'https://api.tech/numbers/base';
 const API_ANIMALS_URL = 'https://animals.tech/';
 
@@ -10,43 +11,58 @@ const isValidChar = str => /^[\d.]+$/.test(str);
 const isValidLength = str => inRange(str.length, 3, 10);
 const isPositiveNumber = num => isFinite(num) && num > 0;
 const validate = value => every([ isValidChar, isValidLength], fn => fn(value));
-const toValidNumber = flow([toNumber, num => isPositiveNumber(num) ? Math.round(num) : NaN ]);
+const toValidNumber = compose(num => isPositiveNumber(num) ? Math.round(num) : NaN, toNumber );
 
-const evalSize = (val) => size(val);
-const square = (length) => multiply(length, length);
-const remains = (square) => modulo(square, 3);
+const evalSize = val => size(val);
+const square = val => multiply(val, val);
+const remains = (val) => modulo(val, 3);
 
-const refreshValue = (val, fn, refreshFn = ((v)=>v)) => {
-    const res = refreshFn(val);
-    fn(res);
-    return res;
-}
+const refresh = (fn, transform = v => v) =>
+  andThen((v) => {
+    const result = transform(v);
+    fn(result);
+    return result;
+  });
+const getResult = prop('result');
 
-const processSequence = ({value, writeLog, handleSuccess, handleError}) => {
+const buildBinaryRequest = assoc('number', __, { from: 10, to: 2 });
+const getBinary = compose(api.get(API_NUMBERS_URL), buildBinaryRequest);
+const getAnimalUrl = id => `${API_ANIMALS_URL}${id}`;
+const fetchAnimal = id => api.get(getAnimalUrl(id), {});
+
+const processSequence = ({ value, writeLog, handleSuccess, handleError }) => {
+
+    const handleValidationError = partial(handleError, 'ValidationError');
+    const handleApiError = otherwise(partial(handleError, 'API Error'));
+
     writeLog(value);
 
-    if(!validate(value)) {
-        handleError('ValidationError');
+    if (!validate(value)) {
+        handleValidationError();
         return;
     }
 
-    const num = toValidNumber(value);
-    if (isNaN(num)) {
-        handleError('ValidationError');
+    const number = toValidNumber(value);
+    if (isNaN(number)) {
+        handleValidationError();
         return;
     }
-    writeLog(num);
+    writeLog(number);
 
-    api.get(API_NUMBERS_URL, {from: 10, to: 2, number: num})
-        .then(property('result'))
-        .then(result => refreshValue(result, writeLog))
-        .then(binStr => refreshValue(binStr, writeLog, evalSize))
-        .then(length => refreshValue(length, writeLog, square))
-        .then(square => refreshValue(square, writeLog, remains))
-        .then(remains => api.get(`${API_ANIMALS_URL}${remains}`, {}))
-        .then(property('result'))
-        .then(handleSuccess)
-        .catch(partial(handleError, 'API Error'));
-}
+    const runPipeline = compose(
+        handleApiError,
+        andThen(handleSuccess),
+        andThen(getResult),
+        andThen(fetchAnimal),
+        refresh(writeLog, remains),
+        refresh(writeLog, square),
+        refresh(writeLog, evalSize),
+        refresh(writeLog),
+        andThen(getResult),
+        getBinary
+    );
+
+    runPipeline(number);
+};
 
 export default processSequence;
