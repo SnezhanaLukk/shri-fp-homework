@@ -1,5 +1,5 @@
 import Api from '../tools/api';
-import { __, andThen, assoc, compose, otherwise, partial, prop, modulo} from 'ramda';
+import { __, andThen, assoc, compose, otherwise, pipe, prop, modulo} from 'ramda';
 import { inRange, toNumber, isFinite, every, size,  multiply } from 'lodash';
 
 const api = new Api();
@@ -30,36 +30,42 @@ const getBinary = compose(api.get(API_NUMBERS_URL), buildBinaryRequest);
 const getAnimalUrl = id => `${API_ANIMALS_URL}${id}`;
 const fetchAnimal = id => api.get(getAnimalUrl(id), {});
 
+const checkAnimalResponse = (response) => {
+  if (!response?.result) { 
+    throw new Error("Animal not found"); 
+  }
+  return response;
+};
+const handleValidationError = (fn) => fn('ValidationError');
+
 const processSequence = ({ value, writeLog, handleSuccess, handleError }) => {
-
-    const handleValidationError = partial(handleError, 'ValidationError');
-    const handleApiError = otherwise(partial(handleError, 'API Error'));
-
     writeLog(value);
-
     if (!validate(value)) {
-        handleValidationError();
+        handleValidationError(handleError);
         return;
     }
-
     const number = toValidNumber(value);
     if (isNaN(number)) {
-        handleValidationError();
+        handleValidationError(handleError);
         return;
     }
     writeLog(number);
 
-    const runPipeline = compose(
-        handleApiError,
-        andThen(handleSuccess),
-        andThen(getResult),
-        andThen(fetchAnimal),
-        refresh(writeLog, remains),
-        refresh(writeLog, square),
-        refresh(writeLog, evalSize),
-        refresh(writeLog),
-        andThen(getResult),
-        getBinary
+    const runPipeline = pipe(
+      getBinary,
+      andThen(getResult),
+      refresh(writeLog),
+      andThen(evalSize),
+      refresh(writeLog),
+      andThen(square),
+      refresh(writeLog),
+      andThen(remains),
+      refresh(writeLog),
+      andThen(fetchAnimal),
+      andThen(checkAnimalResponse),
+      andThen(getResult),
+      andThen(handleSuccess),
+      otherwise(() => handleError("API Error"))
     );
 
     runPipeline(number);
